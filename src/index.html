@@ -2,48 +2,158 @@
 <html>
   <head>
     <title>Prueba Niubiz</title>
+    <!-- Librería oficial de pruebas (Sandbox) -->
     <script src="https://static-content-qas.vnforapps.com/v2/js/checkout.js?qa=true"></script>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        padding: 20px;
+        text-align: center;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+      }
+      button:disabled {
+        background-color: #ccc;
+      }
+      .status {
+        margin-top: 20px;
+        padding: 15px;
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        display: inline-block;
+      }
+    </style>
   </head>
   <body>
-    <button onclick="abrirFormulario()">Pagar S/ 100</button>
+    <h1>Pasarela de Pagos FinCore</h1>
+    <p>Integración oficial Niubiz (Sandbox)</p>
+
+    <button id="pay-button" onclick="iniciarProcesoDePago()">
+      Pagar S/ 100
+    </button>
+
+    <div id="status-container" style="margin-top: 20px">
+      <div id="status-message" class="status">Listo para iniciar</div>
+    </div>
 
     <script type="text/javascript">
-      // 1. Esto vendría de llamar a tu Backend (Paso 1 anterior)
-      // Deberás pegar aquí el token que genere tu endpoint de sesión
-      const sessionToken = 'TOKEN_QUE_TE_DIO_TU_BACKEND_EN_EL_PASO_1';
+      const API_URL = 'http://localhost:3000/payments';
 
-      function abrirFormulario() {
-        // Configuración de Niubiz
-        const config = {
-          action: 'http://localhost:3000/payments/respuesta-niubiz', // URL de retorno (opcional en modal)
-          merchantid: '456879852', // ID de prueba de Niubiz
-          amount: 100.0,
-          purchasenumber: 123456,
-          channel: 'web',
-        };
+      async function iniciarProcesoDePago() {
+        const statusElement = document.getElementById('status-message');
+        const buttonElement = document.getElementById('pay-button');
 
-        // Abrir el formulario
-        VisanetCheckout.configure(config);
-        VisanetCheckout.open(sessionToken);
+        try {
+          statusElement.innerText = '1. Solicitando sesión a Niubiz...';
+          buttonElement.disabled = true;
+
+          // 1. Obtener Token de Sesión desde tu Backend
+          const response = await fetch(`${API_URL}/session-token`);
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(
+              errorData.message || 'Error al conectar con Backend',
+            );
+          }
+
+          const data = await response.json();
+          const sessionToken = data.token;
+
+          console.log('Token recibido:', sessionToken);
+          statusElement.innerText = '2. Abriendo formulario de pago...';
+
+          // 2. Configurar y abrir Niubiz
+          abrirFormulario(sessionToken);
+        } catch (error) {
+          console.error(error);
+          statusElement.innerText = '❌ Error: ' + error.message;
+          buttonElement.disabled = false;
+        }
       }
 
-      // Este evento escucha cuando Niubiz crea el token exitosamente
+      function abrirFormulario(sessionToken) {
+        // ID de compra aleatorio para evitar duplicados en pruebas
+        const purchaseNumber = Math.floor(Math.random() * 999999999);
+
+        const config = {
+          sessiontoken: sessionToken, // OBLIGATORIO AQUÍ
+          channel: 'web', // OBLIGATORIO
+          merchantid: '456879852', // OBLIGATORIO
+          purchasenumber: purchaseNumber, // OBLIGATORIO
+          amount: 100.0, // OBLIGATORIO
+          callbackurl: `${API_URL}/respuesta-niubiz`,
+          language: 'es',
+          font: 'https://fonts.googleapis.com/css?family=Montserrat:400,700',
+          // timeouturl es requerido en algunas versiones, lo dejamos por seguridad
+          timeouturl: 'http://localhost:3000/timeout',
+        };
+
+        try {
+          // Configuramos con TODOS los parámetros requeridos
+          VisanetCheckout.configure(config);
+          // Abrimos sin pasar parámetros adicionales, ya que todo está en configure
+          VisanetCheckout.open();
+        } catch (e) {
+          console.error(e);
+          document.getElementById('status-message').innerText =
+            'Error al inicializar librería Niubiz: ' + e.message;
+          document.getElementById('pay-button').disabled = false;
+        }
+      }
+
+      // 3. Escuchar respuesta del formulario (Card Token)
       window.addEventListener(
         'message',
         function (event) {
           if (event.data && event.data.transactionToken) {
             const cardToken = event.data.transactionToken;
-            console.log('¡TENEMOS EL TOKEN!:', cardToken);
-
-            // AQUÍ es donde llamas a TU backend:
-            // fetch('http://localhost:3000/payments', {
-            //    method: 'POST',
-            //    body: JSON.stringify({ amount: 100, cardToken: cardToken ... })
-            // })
+            console.log('Token de tarjeta recibido:', cardToken);
+            procesarCobro(cardToken);
           }
         },
         false,
       );
+
+      async function procesarCobro(cardToken) {
+        const statusElement = document.getElementById('status-message');
+        statusElement.innerText = '3. Procesando cobro en el servidor...';
+
+        try {
+          const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: 100.0,
+              currency: 'PEN',
+              cardToken: cardToken,
+            }),
+          });
+
+          const result = await response.json();
+          console.log('Resultado del cobro:', result);
+
+          if (response.ok) {
+            statusElement.innerHTML = `✅ <b>¡Pago Exitoso!</b><br>ID Transacción: ${result.data.providerId || result.data.id}<br>Estado: ${result.data.status}`;
+          } else {
+            statusElement.innerText =
+              '❌ Error en el cobro: ' + (result.message || 'Desconocido');
+          }
+        } catch (error) {
+          console.error(error);
+          statusElement.innerText = 'Error de red al intentar cobrar.';
+        } finally {
+          document.getElementById('pay-button').disabled = false;
+        }
+      }
     </script>
   </body>
 </html>

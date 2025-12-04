@@ -1,18 +1,22 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
-import { PaymentController } from './infrastructure/controllers/payment.controller'; // (Aún por crear)
+import { PaymentController } from './infrastructure/controllers/payment.controller';
 import { NiubizAdapter } from './infrastructure/adapters/niubiz.adapter';
-import { ProcessPaymentUseCase } from './application/services/use-cases/process-payment.usecase';
+// 1. IMPORTANTE: Importar el nuevo caso de uso
+import {
+  ProcessPaymentUseCase,
+  GetSessionTokenUseCase,
+} from './application/services/use-cases/process-payment.usecase';
 
 @Module({
-  imports: [HttpModule], // Necesario para que Axios funcione en el Adapter
+  imports: [HttpModule],
   controllers: [PaymentController],
   providers: [
     ProcessPaymentUseCase,
+    // 2. IMPORTANTE: Agregarlo a la lista de providers
+    GetSessionTokenUseCase,
     {
-      // Cuando alguien pida 'PAYMENT_GATEWAY'
       provide: 'PAYMENT_GATEWAY',
-      // Entrégale una instancia de NiubizAdapter
       useClass: NiubizAdapter,
     },
   ],
