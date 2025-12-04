@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Prueba Niubiz</title>
+    <script src="https://static-content-qas.vnforapps.com/v2/js/checkout.js?qa=true"></script>
+  </head>
+  <body>
+    <button onclick="abrirFormulario()">Pagar S/ 100</button>
+
+    <script type="text/javascript">
+      // 1. Esto vendría de llamar a tu Backend (Paso 1 anterior)
+      // Deberás pegar aquí el token que genere tu endpoint de sesión
+      const sessionToken = 'TOKEN_QUE_TE_DIO_TU_BACKEND_EN_EL_PASO_1';
+
+      function abrirFormulario() {
+        // Configuración de Niubiz
+        const config = {
+          action: 'http://localhost:3000/payments/respuesta-niubiz', // URL de retorno (opcional en modal)
+          merchantid: '456879852', // ID de prueba de Niubiz
+          amount: 100.0,
+          purchasenumber: 123456,
+          channel: 'web',
+        };
+
+        // Abrir el formulario
+        VisanetCheckout.configure(config);
+        VisanetCheckout.open(sessionToken);
+      }
+
+      // Este evento escucha cuando Niubiz crea el token exitosamente
+      window.addEventListener(
+        'message',
+        function (event) {
+          if (event.data && event.data.transactionToken) {
+            const cardToken = event.data.transactionToken;
+            console.log('¡TENEMOS EL TOKEN!:', cardToken);
+
+            // AQUÍ es donde llamas a TU backend:
+            // fetch('http://localhost:3000/payments', {
+            //    method: 'POST',
+            //    body: JSON.stringify({ amount: 100, cardToken: cardToken ... })
+            // })
+          }
+        },
+        false,
+      );
+    </script>
+  </body>
+</html>
